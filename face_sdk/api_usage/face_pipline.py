@@ -78,7 +78,7 @@ if __name__ == '__main__':
         logger.info('Success!')
 
     # read image and get face features.
-    image_path = 'api_usage/test_images/test1.jpg'
+    image_path = 'api_usage/test_images/test4_mask.jpg'
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
     face_cropper = FaceRecImageCropper()
     try:
