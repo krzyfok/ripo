@@ -16,7 +16,7 @@ from core.model_loader.face_alignment.FaceAlignModelLoader import FaceAlignModel
 from core.model_handler.face_alignment.FaceAlignModelHandler import FaceAlignModelHandler
 
 with open('config/model_conf.yaml') as f:
-    model_conf = yaml.load(f)
+    model_conf = yaml.load(f, Loader=yaml.SafeLoader)
 
 if __name__ == '__main__':
     # common setting for all model, need not modify.
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     else:
         logger.info('Successfully loaded the face landmark model!')
 
-    faceAlignModelHandler = FaceAlignModelHandler(model, 'cuda:0', cfg)
+    faceAlignModelHandler = FaceAlignModelHandler(model, 'cpu', cfg)
 
     # read image
     image_path = 'api_usage/test_images/test1.jpg'

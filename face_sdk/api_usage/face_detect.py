@@ -16,7 +16,7 @@ from core.model_loader.face_detection.FaceDetModelLoader import FaceDetModelLoad
 from core.model_handler.face_detection.FaceDetModelHandler import FaceDetModelHandler
 
 with open('config/model_conf.yaml') as f:
-    model_conf = yaml.load(f)
+    model_conf = yaml.load(f, Loader=yaml.SafeLoader)
 
 if __name__ == '__main__':
     # common setting for all model, need not modify.
@@ -50,7 +50,7 @@ if __name__ == '__main__':
     # read image
     image_path = 'api_usage/test_images/test1.jpg'
     image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-    faceDetModelHandler = FaceDetModelHandler(model, 'cuda:0', cfg)
+    faceDetModelHandler = FaceDetModelHandler(model, 'cpu', cfg)
 
     try:
         dets = faceDetModelHandler.inference_on_image(image)

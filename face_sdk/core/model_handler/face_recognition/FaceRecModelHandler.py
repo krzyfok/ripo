@@ -33,7 +33,7 @@ class FaceRecModelHandler(BaseModelHandler):
         
     def inference_on_image(self, image):
         """Get the inference of the image.
-
+        
         Returns:
             A numpy array, the output feature, shape (512,), 
         """
@@ -41,11 +41,14 @@ class FaceRecModelHandler(BaseModelHandler):
             image = self._preprocess(image)
         except Exception as e:
             raise e
+        
         image = torch.unsqueeze(image, 0)
         image = image.to(self.device)
+        
         with torch.no_grad():
             feature = self.model(image).cpu().numpy()
         feature = np.squeeze(feature)
+        
         return feature
 
     def _preprocess(self, image):

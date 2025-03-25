@@ -25,7 +25,7 @@ class FaceDetModelLoader(BaseModelLoader):
         
     def load_model(self):
         try:
-            model = torch.load(self.cfg['model_file_path'])
+            model = torch.load(self.cfg['model_file_path'], weights_only=False)
         except Exception as e:
             logger.error('The model failed to load, please check the model path: %s!'
                          % self.cfg['model_file_path'])
