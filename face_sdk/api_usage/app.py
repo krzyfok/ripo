@@ -61,9 +61,6 @@ class FaceRecognizer:
 
         self.face_cropper = FaceRecImageCropper()
 
-    # Reszta metod bez zmian
-
-
     def load_face_database(self):
         """Ładowanie bazy twarzy z folderu my_faces"""
         face_db = defaultdict(list)
@@ -80,14 +77,14 @@ class FaceRecognizer:
                 for img_file in person_dir.glob('*.*'):
                     if img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                         try:
-                            feature = self.process_image(str(img_file))
+                            feature = self.extract_features(str(img_file))
                             face_db[person_name].append(feature)
                         except Exception as e:
                             logger.warning(f"Błąd przetwarzania {img_file}: {str(e)}")
         return face_db
 
-    def process_image(self, image_path):
-        """Przetwarzanie pojedynczego obrazu"""
+    def extract_features(self, image_path):
+        """Ekstrakcja cech bez wizualizacji"""
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Nie można wczytać obrazu: {image_path}")
@@ -103,25 +100,61 @@ class FaceRecognizer:
         cropped_image = self.face_cropper.crop_image_by_mat(image, landmarks_list)
 
         # Ekstrakcja cech
-        return self.face_recognizer.inference_on_image(cropped_image)
+        return self.face_recognizer.inference_on_image(cropped_image).flatten()
+
+    def process_image(self, image_path):
+        """Przetwarzanie obrazu z wizualizacją"""
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"Nie można wczytać obrazu: {image_path}")
+
+        # Detekcja twarzy
+        dets = self.face_detector.inference_on_image(image)
+        if dets.shape[0] == 0:
+            return None, None, None
+
+        # Rysowanie ramek
+        image_with_boxes = image.copy()
+        for box in dets:
+            box = list(map(int, box))
+            cv2.rectangle(image_with_boxes, (box[0], box[1]), (box[2], box[3]), (0, 0, 255), 2)
+
+        # Ekstrakcja cech
+        x, y, w, h = map(int, dets[0][:4])
+        landmarks = self.face_aligner.inference_on_image(image, dets[0])
+        landmarks_list = landmarks.astype(np.int32).flatten().tolist()
+        cropped_image = self.face_cropper.crop_image_by_mat(image, landmarks_list)
+        feature = self.face_recognizer.inference_on_image(cropped_image).flatten()
+
+        return feature, image_with_boxes, (x, y, w, h)
 
     def recognize_face(self, image_path, threshold=0.5):
-        """Główna funkcja rozpoznawania"""
+        """Główna funkcja rozpoznawania z wizualizacją"""
         try:
-            query_feature = self.process_image(image_path)
-            best_match = ("Nieznany", 0.0)
+            feature, image_with_boxes, bbox = self.process_image(image_path)
+            if feature is None:
+                return "Nieznany", 0.0, image_with_boxes
 
+            best_match = ("Nieznany", 0.0)
             for name, features in self.face_db.items():
                 for ref_feature in features:
-                    similarity = np.dot(query_feature, ref_feature)
+                    similarity = np.dot(feature, ref_feature)
                     if similarity > best_match[1]:
                         best_match = (name, similarity)
 
-            return best_match if best_match[1] > threshold else ("Nieznany", 0.0)
+            # Dodanie tekstu z wynikiem
+            x, y, w, h = bbox
+            result_text = f"{best_match[0]}: {best_match[1]*100:.2f}%"
+            cv2.putText(image_with_boxes, result_text, 
+                       (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 
+                       0.4, (0, 0, 255), 1)
+
+            final_result = best_match if best_match[1] > threshold else ("Nieznany", 0.0)
+            return final_result[0], final_result[1], image_with_boxes
             
         except Exception as e:
             logger.error(f"Błąd rozpoznawania: {str(e)}")
-            return ("Błąd przetwarzania", 0.0)
+            return "Błąd", 0.0, None
 
 if __name__ == '__main__':
     import argparse
@@ -131,7 +164,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     recognizer = FaceRecognizer()
-    name, confidence = recognizer.recognize_face(args.image)
+    name, confidence, result_image = recognizer.recognize_face(args.image)
     
     print(f"\nWynik rozpoznania: {name}")
-    print(f"Pewność: {confidence:.4f}\n")
+    print(f"Pewność: {confidence*100:.2f}%\n")
+
+    if result_image is not None:
+        cv2.imshow('Wynik rozpoznania', result_image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
