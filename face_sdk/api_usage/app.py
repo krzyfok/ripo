@@ -1,7 +1,7 @@
 """
 @author: [Twój Nick]
 @modified: [Data]
-@desc: Rozszerzenie oryginalnego skryptu o funkcjonalność rozpoznawania twarzy z bazy
+@desc: Rozszerzenie oryginalnego skryptu o funkcjonalność rozpoznawania twarzy z bazy i obsługę wideo
 """
 import sys
 import os
@@ -10,8 +10,10 @@ import logging.config
 import yaml
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 from pathlib import Path
 from collections import defaultdict
+import time
 
 sys.path.append('.')
 
@@ -156,20 +158,114 @@ class FaceRecognizer:
             logger.error(f"Błąd rozpoznawania: {str(e)}")
             return "Błąd", 0.0, None
 
+    def process_video(self, video_source, output_path=None, frame_skip=2, threshold=0.5):
+        """
+        Przetwarzanie materiału wideo w czasie rzeczywistym
+        :param video_source: Ścieżka do pliku wideo lub 0 dla kamery
+        :param output_path: Ścieżka do zapisu wynikowego wideo
+        :param frame_skip: Co ile klatek przetwarzać (dla wydajności)
+        :param threshold: Próg pewności rozpoznania
+        """
+        cap = cv2.VideoCapture(video_source)
+        if not cap.isOpened():
+            raise ValueError("Nie można otworzyć źródła wideo")
+
+        # Pobranie parametrów wideo
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        # Inicjalizacja VideoWriter jeśli potrzebny
+        if output_path:
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+        frame_count = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame_count += 1
+            if frame_count % frame_skip != 0:
+                continue
+
+            try:
+                # Przetwarzanie klatki
+                dets = self.face_detector.inference_on_image(frame)
+                
+                if dets.shape[0] > 0:
+                    for det in dets:
+                        x1, y1, x2, y2, _ = map(int, det)
+                        # Wykrywanie punktów charakterystycznych
+                        landmarks = self.face_aligner.inference_on_image(frame, det)
+                        # Przycinanie i rozpoznawanie
+                        cropped = self.face_cropper.crop_image_by_mat(frame, landmarks.flatten().tolist())
+                        feature = self.face_recognizer.inference_on_image(cropped).flatten()
+                        
+                        # Porównywanie z bazą danych
+                        best_match = ("Nieznany", 0.0)
+                        for name, features in self.face_db.items():
+                            for ref_feature in features:
+                                similarity = np.dot(feature, ref_feature)
+                                if similarity > best_match[1]:
+                                    best_match = (name, similarity)
+                        
+                        # Rysowanie wyników
+                        if best_match[1] > threshold:
+                            color = (0, 255, 0)  # Zielony dla rozpoznanych
+                        else:
+                            color = (0, 0, 255)  # Czerwony dla nieznanych
+                            
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        cv2.putText(frame, 
+                                  f"{best_match[0]} {best_match[1]*100:.1f}%",
+                                  (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX,
+                                  0.7, color, 2)
+
+                # Zapis i wyświetlanie
+                if output_path:
+                    out.write(frame)
+                
+                cv2.imshow('Wideo', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+
+            except Exception as e:
+                logger.error(f"Błąd przetwarzania klatki: {str(e)}")
+                continue
+
+        cap.release()
+        if output_path:
+            out.release()
+        cv2.destroyAllWindows()
+
 if __name__ == '__main__':
     import argparse
     
     parser = argparse.ArgumentParser(description='System rozpoznawania twarzy')
-    parser.add_argument('image', help='Ścieżka do zdjęcia do analizy')
+    parser.add_argument('-i', '--input', required=True, help='Ścieżka do obrazu/wideo lub 0 dla kamery')
+    parser.add_argument('-o', '--output', help='Ścieżka do zapisu wynikowego wideo')
     args = parser.parse_args()
 
     recognizer = FaceRecognizer()
-    name, confidence, result_image = recognizer.recognize_face(args.image)
-    
-    print(f"\nWynik rozpoznania: {name}")
-    print(f"Pewność: {confidence*100:.2f}%\n")
 
-    if result_image is not None:
-        cv2.imshow('Wynik rozpoznania', result_image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+    if args.input == '0' or args.input.endswith(('.mp4', '.avi', '.mov')):
+        # Tryb wideo
+        recognizer.process_video(
+            video_source=int(args.input) if args.input == '0' else args.input,
+            output_path=args.output,
+            frame_skip=2,
+            threshold=0.6
+        )
+    else:
+        # Tryb obrazu
+        name, confidence, result_image = recognizer.recognize_face(args.input)
+        print(f"\nWynik rozpoznania: {name}")
+        print(f"Pewność: {confidence*100:.2f}%")
+        
+        plt.figure(figsize=(10, 6))
+        plt.imshow(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))
+        plt.axis('off')
+        plt.title("Wynik rozpoznania")
+        plt.show()
