@@ -1,7 +1,13 @@
+
 """
-@author: [Twój Nick]
-@modified: [Data]
-@desc: Rozszerzenie oryginalnego skryptu o funkcjonalność rozpoznawania twarzy z bazy i obsługę wideo
+# Dla kamery
+python skrypt.py -i 0
+
+# Dla pliku wideo
+python skrypt.py -i input.mp4 -o output.mp4
+
+# Dla obrazu
+python skrypt.py -i zdjecie.jpg
 """
 import sys
 import os
