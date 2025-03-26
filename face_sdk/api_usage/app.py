@@ -1,13 +1,13 @@
 
 """
 # Dla kamery
-python skrypt.py -i 0
+python api_usage/app.py -i 0
 
 # Dla pliku wideo
-python skrypt.py -i input.mp4 -o output.mp4
+python api_usage/app.py -i input.mp4 -o output.mp4
 
 # Dla obrazu
-python skrypt.py -i zdjecie.jpg
+python api_usage/app.py -i zdjecie.jpg
 """
 import sys
 import os
